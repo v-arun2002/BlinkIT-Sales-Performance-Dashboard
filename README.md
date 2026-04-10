@@ -1,125 +1,173 @@
-# BlinkIt Sales Analysis Dashboard
+# BlinkIT Sales Analysis Dashboard
+
+![Power BI](https://img.shields.io/badge/Power%20BI-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)
+![DAX](https://img.shields.io/badge/DAX-Data%20Analysis%20Expressions-blue?style=for-the-badge)
 
 ## Project Overview
-This project presents a comprehensive Power BI dashboard analyzing sales data for BlinkIt, India's last-minute delivery service. The dashboard provides insights into sales performance, product distribution, outlet characteristics, and customer ratings across different regions and outlet types.
 
-## Key Metrics
+A comprehensive, multi-page Power BI dashboard analyzing sales performance for BlinkIT, India's last-minute grocery delivery service. The project demonstrates end-to-end BI development including data modeling, DAX measure authoring, row-level security, and interactive report design.
 
-### Overall Performance
-- **Total Sales**: $1.20M
-- **Average Sales per Transaction**: $141
-- **Total Items**: 8,523
-- **Average Customer Rating**: 3.9/5.0
+**Total Sales:** $1.20M | **Avg Sales:** $141 | **Total Items:** 8,523 | **Avg Rating:** 3.9
 
-## Dashboard Features
+---
 
-### 1. Sales Analysis by Fat Content
-- **Regular Fat Products**: $472.13K
-- **Low Fat Products**: $336.40K
-- Average sales remain consistent across both categories (~$141)
+## Data Model — Star Schema
 
-### 2. Outlet Location Performance
-The analysis covers three tiers of outlet locations:
-- **Tier 3**: $472.13K (highest performing)
-- **Tier 2**: $393.15K
-- **Tier 1**: $336.40K
+The original flat dataset was restructured into a proper star schema to enable scalable reporting and enforce data modeling best practices.
 
-### 3. Item Category Performance
-Top performing categories by average sales:
-1. Household items: $149.42
-2. Dairy products: $148.50
-3. Starchy Foods: $147.84
-4. Snack Foods: $146.19
-5. Fruits and Vegetables: $144.58
+```
+Dim_Item ——— Fact_Sales ——— Dim_Outlet
+```
 
-### 4. Outlet Type Analysis
-Four outlet types analyzed:
-- **Supermarket Type1**: $787.55K (65.5% of total sales, 5,577 items)
-- **Grocery Store**: $151.94K (1,083 items)
-- **Supermarket Type2**: $131.48K (928 items)
-- **Supermarket Type3**: $130.71K (935 items)
+### Tables
 
-### 5. Temporal Analysis
-Outlet establishment timeline shows sales trends from 2012-2022:
-- Peak year: 2018 with $205K
-- Recent years (2020-2022) maintaining steady performance around $130K-$133K
+| Table | Type | Key Columns |
+|---|---|---|
+| `Fact_Sales` | Fact | Item_Identifier, Outlet_Identifier, Sales, Rating, Item_Visibility |
+| `Dim_Outlet` | Dimension | Outlet_Identifier, Outlet_Type, Outlet_Size, Outlet_Location_Type, Outlet_Establishment_Year |
+| `Dim_Item` | Dimension | Item_Identifier, Item_Type, Item_Fat_Content |
+| `Dim_Date` | Date Table | Date, Year, Month, Quarter (used for time intelligence measures) |
 
-## Interactive Filters
+### Relationships
+- `Dim_Outlet[Outlet_Identifier]` → `Fact_Sales[Outlet_Identifier]` (1 to many)
+- `Dim_Item[Item_Identifier]` → `Fact_Sales[Item_Identifier]` (1 to many)
 
-The dashboard includes three dynamic filter panels:
-1. **Outlet Location Type**: Filter by Tier 1, 2, or 3
-2. **Outlet Size**: Filter by outlet size categories
-3. **Item Type**: Filter by specific product categories
+> Note: `Dim_Date` is available in the model for time intelligence DAX measures but does not have an active relationship with `Fact_Sales`.
+
+---
+
+## DAX Measures
+
+All measures are stored in a dedicated `_Measures` table following best practices.
+
+### Core Measures
+```dax
+Total Sales = SUM(Fact_Sales[Sales])
+
+Avg Sales = AVERAGE(Fact_Sales[Sales])
+
+Avg Rating = AVERAGE(Fact_Sales[Rating])
+
+No Of Items = COUNTROWS(Fact_Sales)
+```
+
+### Time Intelligence
+```dax
+Sales LY = 
+CALCULATE([Total Sales], SAMEPERIODLASTYEAR(Dim_Date[Date]))
+
+YoY Growth = 
+DIVIDE([Total Sales] - [Sales LY], [Sales LY], 0)
+
+Cumulative Sales = 
+CALCULATE([Total Sales], DATESYTD(Dim_Date[Date]))
+```
+
+### Advanced
+```dax
+Item Sales Rank = 
+RANKX(ALL(Dim_Item[Item_Type]), [Total Sales], , DESC)
+
+Sales vs Target = 
+IF(
+    [Total Sales] >= 'Sales Target'[Sales Target Value],
+    "Above Target",
+    "Below Target"
+)
+
+Outlet_Establishment_Year = 
+LOOKUPVALUE(
+    'BlinkIT Grocery Data'[Outlet Establishment Year],
+    'BlinkIT Grocery Data'[Outlet Identifier],
+    Dim_Outlet[Outlet Identifier]
+)
+```
+
+---
+
+## Row Level Security (RLS)
+
+Three security roles are configured to restrict data access by outlet location tier. Each role filters the `Dim_Outlet` table and cascades to `Fact_Sales` through the active relationship.
+
+| Role | Filter |
+|---|---|
+| Tier 1 | `[Outlet_Location_Type] = "Tier 1"` |
+| Tier 2 | `[Outlet_Location_Type] = "Tier 2"` |
+| Tier 3 | `[Outlet_Location_Type] = "Tier 3"` |
+
+---
+
+## Report Pages
+
+### Page 1 — Main Dashboard
+The primary analytics view with interactive filter panel for Outlet Location Type, Outlet Size, and Item Type. Includes KPI cards, sales by fat content, sales by item type, outlet establishment trend, outlet location breakdown, and outlet type performance table.
+
+### Page 2 — Outlet Detail (Drill-Through)
+A drill-through page activated by right-clicking any outlet type on Page 1. Displays outlet-specific KPIs including Total Sales, Avg Sales, No Of Items, Avg Rating, sales by item type bar chart, and fat content donut chart. Features an automatic back navigation button.
+
+### Page 3 — Sales Target Analysis (What-If)
+An interactive scenario analysis page powered by a What-If Parameter slider ranging from $0 to $1,000,000. Users can dynamically adjust the sales target and the dashboard updates in real time to flag each outlet as "Above Target" or "Below Target."
+
+### Page 4 — Executive Summary
+A single-page executive view designed for non-technical stakeholders. Displays only the four most critical KPIs at a glance with a key business insight: *Supermarket Type1 drives 65% of total revenue across Tier 3 locations.*
+
+---
 
 ## Key Insights
 
-1. **Geographic Distribution**: Tier 3 locations generate the highest revenue, suggesting strong performance in smaller cities/towns
-2. **Product Mix**: Household and dairy items command the highest average sales prices
-3. **Outlet Performance**: Supermarket Type1 dominates with 65.5% market share
-4. **Consistent Quality**: Average rating of 3.9 maintained across all outlet types
-5. **Item Visibility**: Grocery stores have higher item visibility (0.10) compared to supermarkets (0.06)
+- **Tier 3 locations** generate the highest revenue at $472K, outperforming Tier 1 ($336K) and Tier 2 ($393K)
+- **Supermarket Type1** dominates with $787K in sales — 65.5% of total revenue
+- **Fruits & Vegetables** and **Snack Foods** are the top-selling item categories
+- **Average customer rating** is consistently 3.9 across all outlet types
+- **2018** was the peak year for outlet establishment with $205K in sales
 
-## Technical Details
+---
 
-### Tools Used
-- **Power BI Desktop**: Primary visualization and analysis tool
-- **Data Processing**: ETL processes for data cleaning and transformation
+## Technical Skills Demonstrated
 
-### Visualizations Included
-- KPI Cards (Total Sales, Avg Sales, Items, Rating)
-- Donut Charts (Fat Content distribution, Outlet Location)
-- Horizontal Bar Charts (Item Type performance, Fat by Outlet)
-- Area Chart (Outlet Establishment timeline)
-- Data Table (Outlet Type detailed metrics)
-- Filter Slicers (Interactive filtering capabilities)
+| Skill | Details |
+|---|---|
+| Data Modeling | Star schema design, fact and dimension table separation |
+| DAX | Time intelligence, RANKX, CALCULATE, DIVIDE, LOOKUPVALUE, What-If |
+| Row Level Security | Role-based data filtering by outlet tier |
+| Report Design | Drill-through, bookmarks, tooltips, interactive slicers |
+| Power Query | Data transformation and table merging |
+| Dashboard Design | Multi-page layout, executive summary, consistent theming |
 
-## Data Quality Metrics
-- **Item Visibility Range**: 0.06 - 0.10
-- **Rating Consistency**: 3.91 - 3.93 across outlet types
-- **Complete Dataset**: All 8,523 items accounted for
+---
 
-## Business Recommendations
+## Project Structure
 
-1. **Expand Tier 3 Presence**: Focus on expanding in Tier 3 locations given their superior performance
-2. **Category Optimization**: Increase inventory of high-margin household and dairy products
-3. **Supermarket Type1 Strategy**: Leverage the success model of Type1 supermarkets
-4. **Grocery Store Enhancement**: Improve grocery store operations despite lower volumes but higher visibility
+```
+blinkit-sales-dashboard/
+│
+├── README.md
+├── dashboard/
+│   └── BlinkIT_Dashboard.pbix
+├── data/
+│   └── BlinkIT_Grocery_Data.csv
+└── assets/
+    ├── page1_main_dashboard.png
+    ├── page2_outlet_detail.png
+    ├── page3_sales_target.png
+    └── page4_executive_summary.png
+```
 
-## How to Use This Dashboard
+---
 
-1. **Overview**: Start with the KPI cards at the top for quick insights
-2. **Deep Dive**: Use the filter panel on the left to drill down into specific segments
-3. **Comparisons**: Utilize the donut and bar charts to compare performance across categories
-4. **Trends**: Review the timeline chart for historical performance patterns
-5. **Details**: Refer to the outlet type table for comprehensive metrics
+## Setup Instructions
 
-
-## Installation & Setup
-
-### Prerequisites
-- Power BI Desktop (latest version)
-- Windows 10 or later
-
-### Steps
 1. Clone or download this repository
-2. Open Power BI Desktop
-3. Navigate to File > Open
-4. Select the `BlinkIt_Dashboard.pbix` file
-5. Refresh data connections if prompted
+2. Open **Power BI Desktop**
+3. Open `BlinkIT_Dashboard.pbix`
+4. Refresh data connections if prompted
+5. To test RLS: **Modeling tab → View as → Select a role**
 
-## Data Sources
-The dashboard connects to the following data sources:
-- Sales transaction data
-- Product catalog
-- Outlet information
-- Customer ratings
+---
 
-## Future Enhancements
+## About
 
-- [ ] Real-time data integration
-- [ ] Predictive analytics for demand forecasting
-- [ ] Customer segmentation analysis
-- [ ] Seasonal trend analysis
-- [ ] Profitability analysis by category
-- [ ] Mobile-responsive dashboard version
-- [ ] Automated email reports
+**Tool:** Power BI Desktop  
+**Data Source:** BlinkIT Grocery Sales Dataset  
+**Rows:** 8,523 transactions  
+**Domain:** Retail & Grocery Analytics
